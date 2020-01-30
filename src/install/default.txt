@@ -44,7 +44,6 @@ fi
 # FUNCTIONS
 #-------------------------------------------------------------------------------
 
-
 #---  FUNCTION  ----------------------------------------------------------------
 #          NAME:  print_banner
 #   DESCRIPTION:  Prints a banner
@@ -341,8 +340,8 @@ extract_file() {
 
 #---  FUNCTION  ----------------------------------------------------------------
 #          NAME:  create_prefix
-#   DESCRIPTION:  Creates the install prefix (and any parent directories). If
-#                 EUID not 0, then attempt to use sudo.
+#   DESCRIPTION:  Creates the install prefix. If EUID not 0 AND prefix not
+#                 writable, then attempt to use sudo.
 #    PARAMETERS:  $1 = prefix
 #       RETURNS:  Return code of the tool used to make the directory
 #                 0 = Created the directory
@@ -358,11 +357,13 @@ create_prefix() {
 
   if command -v mkdir >/dev/null 2>&1; then
     if [[ "${EUID}" == "0" ]]; then
-      mkdir -p "${prefix}"
+      mkdir "${prefix}"
       rcode="${?}"
+    elif mkdir "${prefix}"; then
+      return "0"
     else
       if command -v sudo >/dev/null 2>&1; then
-        sudo mkdir -p "${prefix}"
+        sudo mkdir "${prefix}"
         rcode="${?}"
       else
         rcode="21"
@@ -371,7 +372,7 @@ create_prefix() {
   else
     rcode="20"
   fi
-
+  
   return "${rcode}"
 }
 
@@ -396,6 +397,9 @@ install_file_freebsd() {
 
   if command -v install >/dev/null 2>&1; then
     if [[ "${EUID}" == "0" ]]; then
+      install -C -b -B '_old' -m 755 "${file}" "${prefix}"
+      rcode="${?}"
+    elif [[ -w "${prefix}" ]]; then
       install -C -b -B '_old' -m 755 "${file}" "${prefix}"
       rcode="${?}"
     else
@@ -434,6 +438,9 @@ install_file_linux() {
 
   if command -v install >/dev/null 2>&1; then
     if [[ "${EUID}" == "0" ]]; then
+      install -C -b -S '_old' -m 755 -t "${prefix}" "${file}"
+      rcode="${?}"
+    elif [[ -w "${prefix}" ]]; then
       install -C -b -S '_old' -m 755 -t "${prefix}" "${file}"
       rcode="${?}"
     else
@@ -688,6 +695,7 @@ main() {
   esac
   if [[ "${install_file_rcode}" == "0" ]]; then
     print_message "== Installed ${croc_bin_name} to ${prefix}/" "ok"
+    print_message "== Make sure to add ${prefix} to your PATH if not there already." "info"
   elif [[ "${install_file_rcode}" == "1" ]]; then
     print_message "== Failed to install ${croc_bin_name}" "error"
     exit 1
